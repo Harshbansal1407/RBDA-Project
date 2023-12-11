@@ -1,0 +1,5 @@
+Bronx   11099393
+Brooklyn        7122983
+Manhattan       11744035
+Queens  19907231
+Staten Island   12550968
