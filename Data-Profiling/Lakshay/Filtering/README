@@ -1,0 +1,8 @@
+To run wordcount use the following command 
+
+hadoop fs -put sample.csv 
+bash run.sh <output_name>
+
+prior to running change idx to column you want a profile of based on document
+
+I have already stored a processed sample_out.csv for viewing to save time in case running code is too cumbersome

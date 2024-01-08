@@ -1,0 +1,135 @@
+SQL QUERIES
+TRAFFIC VOLUME:
+
+# Table generation:
+create external table atvc(RequestId int, boro string, yr int, m int, d int, hh int, mm int, vol int, street string)
+row format delimited fields terminated by ','
+location 'file_path';
+
+# Table generation:
+CREATE TABLE mvc AS
+SELECT
+  CRASH_DATE,
+  CRASH_TIME,
+  BOROUGH,
+  ZIP_CODE,
+  LATITUDE,
+  LONGITUDE,
+  TRIM(ON_STREET_NAME) AS ON_STREET_NAME,
+  TRIM(CROSS_STREET_NAME) AS CROSS_STREET_NAME,
+  OFF_STREET_NAME,
+  NUMBER_OF_PERSONS_INJURED,
+  NUMBER_OF_PERSONS_KILLED,
+  NUMBER_OF_PEDESTRIANS_INJURED,
+  NUMBER_OF_PEDESTRIANS_KILLED,
+  NUMBER_OF_CYCLIST_INJURED,
+  NUMBER_OF_CYCLIST_KILLED,
+  NUMBER_OF_MOTORIST_INJURED,
+  NUMBER_OF_MOTORIST_KILLED,
+  CONTRIBUTING_FACTOR_VEHICLE_1,
+  CONTRIBUTING_FACTOR_VEHICLE_2,
+  CONTRIBUTING_FACTOR_VEHICLE_3,
+  CONTRIBUTING_FACTOR_VEHICLE_4,
+  CONTRIBUTING_FACTOR_VEHICLE_5,
+  COLLISION_ID,
+  VEHICLE_TYPE_CODE_1,
+  VEHICLE_TYPE_CODE_2,
+  VEHICLE_TYPE_CODE_3,
+  VEHICLE_TYPE_CODE_4,
+  VEHICLE_TYPE_CODE_5
+FROM
+  Motorcollisions;
+
+
+#Table Creation
+CREATE EXTERNAL TABLE traffic_speed
+(SPEED decimal(6, 2),
+TRAVEL_TIME int, 
+STATUS int, 
+DATE_TIME timestamp, 
+BOROUGH string, 
+FROM_STREET string, 
+TO_STREET string)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+LOCATION 'file_path’';
+
+Individual Analysis:
+# to get the average traffic volume by hour throughout the years
+select hh as hour, avg(vol) as avg_vol from atvc group by hh order by hh inc;
+
+# to get the average traffic volume by Borough throughout the years
+select boro as Borough, avg(vol) as avg_vol from atvc group by boro order by boro inc;
+
+# to get the top 3 busiest streets 
+select street,avg(vol) as avg_volume from atvc group by street order by avg_volume desc limit 3;
+
+# to get the top 3 streets from manhattan (since it is the boro with highest traffic vol)
+select street,avg(vol) as avg_volume from atvc where boro=’Manhattan’ group by street order by avg_volume desc limit 3;
+
+# to get the average traffic volume by Day of the week throughout the years.
+SELECT day_of_week,AVG(vol) FROM (
+SELECT date_format(date_parse(formatteddate, '%Y-%m-%d'), '%W') AS day_of_week,vol
+FROM (SELECT FormattedDate,vol FROM (SELECT Yr,M,D,
+CONCAT( CAST(yr AS VARCHAR), '-', LPAD(CAST(m AS VARCHAR), 2, '0'), '-', LPAD(CAST(d AS VARCHAR), 2, '0')) AS FormattedDate, vol FROM atvc)))
+GROUP BY day_of_week 
+ORDER BY day_of_week;
+
+
+CORRELATION QUERIES:
+# correlation between traffic vol and traffic speed
+WITH speed_st AS (
+	select from_st, avg(speed) as avg_speed 
+	from traffic_speed
+	group by from_st
+),volume_st AS (
+	select street, avg(volume) as avg_volume
+	from atvc
+	group by street
+)
+CREATE TABLE speed_volume_st AS
+	SELECT volume_st.street, speed_st.avg_speed, volume_st.avg_volume
+	FROM speed_st INNER JOIN volume_st ON speed_st.from_st = volume_st.street;
+
+SELECT
+  (count(*)*sum(avg_speed*avg_volume) - sum(avg_speed)*sum(avg_volume)) / 
+  (sqrt(count(*)*sum(avg_speed*avg_speed) - sum(avg_speed)*sum(avg_speed)) * sqrt(count(*)*sum(avg_volume*avg_volume) - sum(avg_volume)*sum(avg_volume))) as correlation
+FROM speed_volume_st;
+
+
+
+# Get count of incidents per day of the week:
+select day_of_week, count(*) from (SELECT date_format(date_parse(CRASH_DATE, '%m/%d/%Y'), '%W') AS day_of_week FROM mvc) group by day_of_week order by day_of_week;
+
+# Get list of total injured people per street
+SELECT
+  ON_STREET_NAME,
+  SUM(NUMBER_OF_PERSONS_KILLED + NUMBER_OF_PEDESTRIANS_KILLED + NUMBER_OF_CYCLIST_KILLED + NUMBER_OF_MOTORIST_KILLED) AS total_injured_people
+FROM
+  mvc
+GROUP BY
+  ON_STREET_NAME
+ORDER BY
+  total_injured_people DESC;
+
+# Join volume & collision table:
+CREATE TABLE combined_data AS
+SELECT
+  t1.ON_STREET_NAME AS street,
+  t1.NUMBER_OF_PERSONS_INJURED + t1.NUMBER_OF_PEDESTRIANS_INJURED AS total_injured_people,
+  t2.vol
+FROM
+  mvc t1
+JOIN
+  atvc t2
+ON
+  t1.ON_STREET_NAME = t2.street;
+
+# Get correlation between the number of injured & killed over the street names.
+WITH speed_volume AS (
+	SELECT ON_STREET_NAME, SUM(NUMBER_OF_PERSONS_KILLED + NUMBER_OF_PEDESTRIANS_KILLED + NUMBER_OF_CYCLIST_KILLED + NUMBER_OF_MOTORIST_KILLED) as avg_speed, SUM(NUMBER_OF_PERSONS_INJURED + NUMBER_OF_PEDESTRIANS_INJURED + NUMBER_OF_CYCLIST_INJURED + NUMBER_OF_MOTORIST_INJURED) as avg_volume
+	FROM mvc group by ON_STREET_NAME
+)
+SELECT
+  (count(*)*sum(avg_speed*avg_volume) - sum(avg_speed)*sum(avg_volume)) / 
+  (sqrt(count(*)*sum(avg_speed*avg_speed) - sum(avg_speed)*sum(avg_speed)) * sqrt(count(*)*sum(avg_volume*avg_volume) - sum(avg_volume)*sum(avg_volume))) as correlation
+FROM speed_volume;
