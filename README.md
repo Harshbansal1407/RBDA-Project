@@ -1,5 +1,5 @@
 # RBDA-Project
-Group 10: NYC Traffic Dynamic Assessment
+Done by Group 10: NYC Traffic Dynamic Assessment
 
 ### Members
 Harsh Bansal (hb2709)\
